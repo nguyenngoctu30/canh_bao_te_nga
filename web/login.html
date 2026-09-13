@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Login</title>
+<script src="/config.js"></script>
+<script>
+  (function(){
+    const base = window.API_BASE || '';
+    window.addEventListener('DOMContentLoaded', ()=>{
+      const f = document.getElementById('loginForm');
+      if(f){
+        f.addEventListener('submit', function(e){
+          e.preventDefault();
+          const fd = new FormData(f);
+          fetch((base||'')+'/login', {method:'POST', body:fd, headers: { 'X-API-KEY': window.API_KEY||'' }})
+            .then(r=>{ if(r.redirected){ window.location = r.url; } else return r.text(); })
+            .catch(err=>alert('Login error: '+err));
+        });
+      }
+    });
+  })();
+</script>
+</head>
+<body>
+  <h2>Login</h2>
+  <form id="loginForm">
+    <label>Username<input name="username" value="admin"></label><br>
+    <label>Password<input type="password" name="password"></label><br>
+    <button type="submit">Login</button>
+  </form>
+</body>
+</html>
