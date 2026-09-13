@@ -30,6 +30,7 @@ from flask import (
     Flask, Response, request, jsonify, session, redirect,
     url_for, send_from_directory, render_template
 )
+from flask_cors import CORS
 from ultralytics import YOLO
 
 # =====================================================================
@@ -75,6 +76,9 @@ os.makedirs(ALERT_DIR, exist_ok=True)
 
 WEB_USERNAME = os.environ.get("WEB_USERNAME", "admin")
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "changeme123")
+# Optional public API key to allow cross-origin static frontend to access
+# endpoints without session cookies. Set PUBLIC_API_KEY in env to enable.
+PUBLIC_API_KEY = os.environ.get("PUBLIC_API_KEY")
 
 # ---- Dieu khien goc camera (PTZ qua ONVIF) ----
 # Nhieu camera PTZ dung chung IP nhung PORT ONVIF khac PORT RTSP (554).
@@ -109,12 +113,24 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me-in-production")
 app.permanent_session_lifetime = timedelta(days=7)
 
+# Enable CORS for frontend hosting (e.g., Vercel). If using credentials, set
+# a specific origin and supports_credentials=True. For simple public API key
+# usage we allow all origins here.
+CORS(app)
+
 
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Allow session-based login
         if session.get("logged_in"):
             return f(*args, **kwargs)
+        # Allow API key in header or query string for static frontends
+        key = None
+        if PUBLIC_API_KEY:
+            key = request.headers.get('X-API-KEY') or request.args.get('api_key')
+            if key == PUBLIC_API_KEY:
+                return f(*args, **kwargs)
         if request.path in ("/", "/video_feed"):
             return redirect(url_for("login_page", next=request.path))
         return jsonify({"status": "error", "message": "Chua dang nhap"}), 401
@@ -922,6 +938,23 @@ def delete_alert(filename):
 # MAIN — waitress (on dinh hon Flask dev server tren Windows)
 # =====================================================================
 if __name__ == "__main__":
+    # Optional: if NGROK_AUTH_TOKEN is set in env, attempt to open an ngrok
+    # tunnel and print the public URL so you can access this server from
+    # anywhere. Requires `pyngrok` to be installed and a valid authtoken.
+    ngrok_url = None
+    NGROK_AUTH_TOKEN = os.environ.get('NGROK_AUTH_TOKEN')
+    if NGROK_AUTH_TOKEN:
+        try:
+            from pyngrok import ngrok, conf
+            conf.get_default().auth_token = NGROK_AUTH_TOKEN
+            tunnel = ngrok.connect(5000, bind_tls=True)
+            ngrok_url = tunnel.public_url
+            print(f"[NGROK] Public URL: {ngrok_url}")
+            if PUBLIC_API_KEY:
+                print(f"[NGROK] Use API key: set window.API_KEY in web/config.js to '{PUBLIC_API_KEY}'")
+        except Exception as e:
+            print(f"[NGROK] Could not start ngrok tunnel: {e}")
+
     try:
         from waitress import serve
         print("[SERVER] Chay voi waitress tren port 5000...")
