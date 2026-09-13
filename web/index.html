@@ -40,9 +40,33 @@
   </div>
   <div style="max-width:960px;margin:0 auto;padding:12px;">
     <button onclick="location.href='/login'">Login</button>
-    <p>This static frontend forwards API calls to the configured <code>API_BASE</code>.
-       Edit <code>web/config.js</code> before deploying to Vercel.
-    </p>
+    <p>This static frontend forwards API calls to the configured <code>API_BASE</code>.</p>
+    <div style="margin-top:8px;padding:8px;background:#071022;border-radius:6px;">
+      <label style="display:block;margin-bottom:6px;font-size:14px">Backend URL (API_BASE):</label>
+      <input id="api_base_input" type="text" style="width:70%" placeholder="https://your-backend.example.com" />
+      <button id="api_base_set">Set & Save</button>
+      <button id="api_base_clear">Clear</button>
+      <div id="api_base_current" style="margin-top:8px;font-size:13px;color:#9cc" />
+    </div>
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const inp = document.getElementById('api_base_input');
+      const btn = document.getElementById('api_base_set');
+      const clr = document.getElementById('api_base_clear');
+      const cur = document.getElementById('api_base_current');
+      const show = () => { cur.textContent = 'Current API_BASE: ' + (window.API_BASE || '(unset)'); };
+      show();
+      btn.addEventListener('click', ()=>{
+        const v = inp.value.trim(); if(!v) return alert('Enter URL');
+        window.setApiBase(v);
+        show();
+        location.reload();
+      });
+      clr.addEventListener('click', ()=>{
+        window.clearApiBase(); show(); location.reload();
+      });
+    });
+  </script>
 </body>
 </html>
