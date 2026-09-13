@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fall Detection — Giám sát té ngã</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0d12; --surface:#11161d; --s2:#161d27;
+  --border:#1f2733; --border-2:#2a3441;
+  --accent:#2dd4bf; --accent-h:#14b8a6;
+  --danger:#f43f5e; --danger-dim:rgba(244,63,94,.14);
+  --text:#dbe4ec; --muted:#5b6779; --muted-2:#7d8a9c;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+
+/* ===== HEADER ===== */
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:.01em}
+.brand-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#0f766e,#2dd4bf);display:flex;align-items:center;justify-content:center;font-size:17px}
+.status-cluster{display:flex;align-items:center;gap:14px;font-size:12.5px;color:var(--muted-2)}
+.status-item{display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.dot.on{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.dot.off{background:var(--danger)}
+.status-item .val{font-family:var(--mono);color:var(--text);font-weight:600}
+.hbtn{background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 13px;font-size:12.5px;cursor:pointer}
+.hbtn:hover{background:var(--border-2)}
+
+/* ===== FALL BANNER ===== */
+#fallBanner{display:none;background:var(--danger);color:#fff;padding:10px 20px;font-weight:700;font-size:14px;align-items:center;gap:10px;justify-content:center}
+#fallBanner.show{display:flex}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+#fallBanner .pulse-dot{width:9px;height:9px;border-radius:50%;background:#fff;animation:pulse 1s infinite}
+
+/* ===== LAYOUT ===== */
+.layout{display:flex;flex:1;overflow:hidden}
+.main-area{flex:1.6;display:flex;flex-direction:column;align-items:center;padding:18px;gap:14px;overflow-y:auto}
+.sidebar{flex:1;min-width:320px;max-width:420px;background:var(--surface);border-left:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+
+/* ===== VIDEO ===== */
+.video-wrap{position:relative;width:100%;max-width:980px;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#000}
+#cam{width:100%;display:block;aspect-ratio:16/9;object-fit:cover}
+
+/* ===== PANEL ===== */
+.panel{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;width:100%;max-width:980px}
+.panel-title{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--muted-2);margin-bottom:10px}
+.stat-row{display:flex;gap:22px;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat .label{font-size:11px;color:var(--muted)}
+.stat .num{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--text)}
+.stat .num.danger{color:var(--danger)}
+.stat .num.accent{color:var(--accent)}
+
+/* ===== PTZ JOYSTICK (sidebar) ===== */
+.ptz-note{font-size:11px;color:var(--muted);margin-top:8px;text-align:center}
+.jstick-wrap{display:flex;justify-content:center;padding:6px 0}
+.jzone{width:120px;height:120px;border-radius:50%;background:var(--bg);border:1px solid var(--border);position:relative;touch-action:none;cursor:crosshair;user-select:none}
+.jzone::before,.jzone::after{content:'';position:absolute;background:var(--border)}
+.jzone::before{width:1px;height:100%;left:50%;top:0;transform:translateX(-50%)}
+.jzone::after{width:100%;height:1px;top:50%;left:0;transform:translateY(-50%)}
+.jknob{width:40px;height:40px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px rgba(45,212,191,.5);position:absolute;left:40px;top:40px;pointer-events:none}
+.zoom-row{display:flex;align-items:center;gap:8px;margin-top:12px}
+.zbtn{width:30px;height:30px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.zbtn:hover{background:var(--border-2)}
+.ztrack{flex:1;height:4px;background:var(--bg);border-radius:3px;overflow:hidden}
+.zfill{height:100%;background:var(--accent);width:0%;transition:width .15s}
+.zlbl{font-family:var(--mono);font-size:12px;color:var(--text);min-width:34px;text-align:right}
+input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--bg);border-radius:2px;outline:none;margin-top:6px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer}
+.speed-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:12px 0 4px}
+
+/* ===== POSE CARDS (nguoi dang theo doi) ===== */
+.pose-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.pose-card{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:7px;padding:10px}
+.pose-card.fall{border-left-color:var(--danger)}
+.pose-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.pose-id{font-family:var(--mono);font-weight:600;font-size:13px}
+.pose-svg-wrap{background:var(--s2);border-radius:5px;display:flex;justify-content:center;padding:4px 0;margin-bottom:8px}
+.pose-meta{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted-2)}
+.pose-meta .mono{font-family:var(--mono);color:var(--text)}
+
+/* ===== PERSON TABLE ===== */
+.ptable{width:100%;border-collapse:collapse;font-size:12.5px}
+.ptable th{text-align:left;color:var(--muted);font-weight:500;font-size:11px;padding:6px 8px;border-bottom:1px solid var(--border)}
+.ptable td{padding:7px 8px;border-bottom:1px solid var(--border);font-family:var(--mono)}
+.ptable tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-family:'Inter',sans-serif;font-weight:600}
+.badge.normal{background:rgba(45,212,191,.12);color:var(--accent)}
+.badge.fall{background:var(--danger-dim);color:var(--danger)}
+.empty-row{color:var(--muted);text-align:center;padding:22px 0;font-family:'Inter',sans-serif;font-size:13px}
+
+/* ===== ALERT HISTORY ===== */
+.alert-item{display:flex;gap:10px;background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--danger);border-radius:6px;padding:8px;margin-bottom:8px;align-items:center}
+.alert-item img{width:64px;height:44px;object-fit:cover;border-radius:4px;cursor:pointer;background:#000}
+.alert-info{flex:1;min-width:0}
+.alert-info .aid{font-size:12.5px;font-weight:600}
+.alert-info .atime{font-family:var(--mono);font-size:11px;color:var(--muted-2)}
+.alert-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;padding:4px 6px}
+.alert-del:hover{color:var(--danger)}
+
+/* ===== LIGHTBOX ===== */
+.lbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;align-items:center;justify-content:center;padding:20px}
+.lbox.open{display:flex}
+.lbox img{max-width:92vw;max-height:88vh;border-radius:6px;object-fit:contain}
+.lclose{position:absolute;top:16px;right:18px;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:20px;cursor:pointer;border-radius:7px;width:38px;height:38px}
+.lclose:hover{background:rgba(255,255,255,.2)}
+
+@media(max-width:900px){
+  .layout{flex-direction:column}
+  .sidebar{max-width:100%;border-left:none;border-top:1px solid var(--border)}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><div class="brand-icon">🚨</div>Fall Detection — YOLO26 Pose</div>
+  <div class="status-cluster">
+    <div class="status-item"><span class="dot off" id="dot"></span><span id="sTxt">Đang kiểm tra…</span></div>
+    <div class="status-item">FPS <span class="val" id="sFps">–</span></div>
+    <div class="status-item">Model <span class="val" id="sModel">–</span></div>
+  </div>
+  <button class="hbtn" onclick="location='/logout'">⎋ Đăng xuất</button>
+</header>
+
+<div id="fallBanner"><span class="pulse-dot"></span><span id="fallBannerText">CẢNH BÁO: PHÁT HIỆN TÉ NGÃ</span></div>
+
+<div class="layout">
+  <main class="main-area">
+    <div class="video-wrap">
+      <img id="cam" src="/video_feed" alt="Camera feed">
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">TỔNG QUAN</div>
+      <div class="stat-row">
+        <div class="stat"><span class="label">Số người</span><span class="num" id="statPersons">0</span></div>
+        <div class="stat"><span class="label">Đang té ngã</span><span class="num danger" id="statFalls">0</span></div>
+        <div class="stat"><span class="label">FPS xử lý</span><span class="num accent" id="statFps">0</span></div>
+        <div class="stat"><span class="label">Độ trễ khung hình</span><span class="num" id="statLat">– ms</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">PHÂN TÍCH DÁNG NGƯỜI (ID · KHUNG XƯƠNG · TƯ THẾ)</div>
+      <div class="pose-grid" id="poseGrid"></div>
+      <div class="empty-row" id="poseEmpty" style="display:none">Chưa phát hiện người trong khung hình</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">BẢNG TÓM TẮT</div>
+      <table class="ptable">
+        <thead>
+          <tr><th>ID</th><th>Bbox (x1,y1,x2,y2)</th><th>Keypoints</th><th>Tỉ lệ khung</th><th>Góc thân (°)</th><th>Trạng thái</th></tr>
+        </thead>
+        <tbody id="personRows"></tbody>
+      </table>
+      <div class="empty-row" id="personEmpty" style="display:none">Chưa phát hiện người trong khung hình</div>
+    </div>
+  </main>
+
+  <aside class="sidebar">
+    <div>
+      <div class="panel-title">ĐIỀU CHỈNH GÓC CAMERA (PTZ)</div>
+      <div class="jstick-wrap">
+        <div class="jzone" id="jZone"><div class="jknob" id="jKnob"></div></div>
+      </div>
+      <div class="speed-lbl"><span>Tốc độ xoay</span><span class="mono" id="spdLbl">0.50</span></div>
+      <input type="range" min="0.05" max="1.0" step="0.05" value="0.5" id="spdSlider" oninput="onSpeed(this.value)">
+      <div class="zoom-row">
+        <button class="zbtn" onclick="doZoom('out')">−</button>
+        <div class="ztrack"><div class="zfill" id="zFill"></div></div>
+        <button class="zbtn" onclick="doZoom('in')">+</button>
+        <span class="zlbl" id="zLbl">1.0×</span>
+      </div>
+      <div class="ptz-note" id="ptzNote">Đang kiểm tra kết nối PTZ…</div>
+    </div>
+
+    <div>
+      <div class="panel-title">LỊCH SỬ CẢNH BÁO TÉ NGÃ</div>
+      <div id="alertList"></div>
+      <div class="empty-row" id="alertEmpty" style="display:none">Chưa có cảnh báo nào</div>
+    </div>
+  </aside>
+</div>
+
+<div class="lbox" id="lbox">
+  <button class="lclose" onclick="closeLb()">×</button>
+  <img id="lbImg" src="">
+</div>
+
+<script>
+// ═══ ÂM THANH CẢNH BÁO (beep, không cần file audio) ═══
+let _audioCtx = null;
+function beep(){
+  try{
+    _audioCtx = _audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=_audioCtx.createOscillator(), g=_audioCtx.createGain();
+    o.type='square'; o.frequency.value=880;
+    g.gain.value=0.08;
+    o.connect(g); g.connect(_audioCtx.destination);
+    o.start(); o.stop(_audioCtx.currentTime+0.35);
+  }catch(e){}
+}
+
+// ═══ STATUS + BẢNG NGƯỜI THEO DÕI ═══
+function pollStatus(){
+  fetch('/status', {credentials: 'same-origin'}).then(r=>r.json()).then(d=>{
+    document.getElementById('dot').className='dot '+(d.online?'on':'off');
+    document.getElementById('sTxt').textContent=d.online?'Online':'Mất kết nối';
+    document.getElementById('sFps').textContent=d.fps+' fps';
+    document.getElementById('sModel').textContent=d.model_ok?'Sẵn sàng':'Đang nạp…';
+
+    document.getElementById('statPersons').textContent=d.person_count;
+    document.getElementById('statFalls').textContent=d.fall_count;
+    document.getElementById('statFps').textContent=d.fps;
+    document.getElementById('statLat').textContent=(d.frame_age_ms??'–')+' ms';
+
+    setZoomUI(d.zoom??1.0);
+    document.getElementById('ptzNote').textContent = d.ptz_ok
+      ? 'PTZ đã kết nối — kéo vòng tròn để xoay camera'
+      : 'PTZ chưa kết nối (kiểm tra ONVIF_PORT hoặc camera không hỗ trợ PTZ)';
+
+    const banner=document.getElementById('fallBanner');
+    if(d.fall_count>0){
+      banner.classList.add('show');
+      document.getElementById('fallBannerText').textContent =
+        'CẢNH BÁO: ' + d.fall_count + ' NGƯỜI ĐANG TÉ NGÃ';
+    } else {
+      banner.classList.remove('show');
+    }
+
+    renderPersons(d.persons||[]);
+    renderPoseCards(d.persons||[]);
+  }).catch(()=>{
+    document.getElementById('dot').className='dot off';
+    document.getElementById('sTxt').textContent='Mất kết nối';
+  });
+}
+
+function renderPersons(persons){
+  const rows=document.getElementById('personRows');
+  const empty=document.getElementById('personEmpty');
+  if(!persons.length){ rows.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  rows.innerHTML=persons.map(p=>{
+    const kpCount=(p.keypoints||[]).filter(k=>k[2]>=0.3).length;
+    const badge=p.fallen?'<span class="badge fall">TÉ NGÃ</span>':'<span class="badge normal">Bình thường</span>';
+    return `<tr>
+      <td>${p.id}</td>
+      <td>${p.bbox.join(', ')}</td>
+      <td>${kpCount}/17</td>
+      <td>${p.aspect_ratio}</td>
+      <td>${p.torso_angle ?? '–'}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══ PHÂN TÍCH DÁNG NGƯỜI — mini skeleton SVG cho mỗi người ═══
+const SKELETON_PAIRS=[[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16],[0,5],[0,6]];
+
+function miniSkeletonSVG(bbox, keypoints){
+  const W=120,H=90,PAD=8;
+  if(!keypoints || !keypoints.length) return `<svg width="${W}" height="${H}"></svg>`;
+  const [x1,y1,x2,y2]=bbox;
+  const bw=Math.max(x2-x1,1), bh=Math.max(y2-y1,1);
+  const sx=v=>PAD+((v-x1)/bw)*(W-2*PAD);
+  const sy=v=>PAD+((v-y1)/bh)*(H-2*PAD);
+  let lines='', dots='';
+  SKELETON_PAIRS.forEach(([a,b])=>{
+    const pa=keypoints[a], pb=keypoints[b];
+    if(pa && pb && pa[2]>=0.3 && pb[2]>=0.3){
+      lines+=`<line x1="${sx(pa[0]).toFixed(1)}" y1="${sy(pa[1]).toFixed(1)}" x2="${sx(pb[0]).toFixed(1)}" y2="${sy(pb[1]).toFixed(1)}" stroke="#2dd4bf" stroke-width="2" stroke-linecap="round"/>`;
+    }
+  });
+  keypoints.forEach(kp=>{
+    if(kp[2]>=0.3){
+      dots+=`<circle cx="${sx(kp[0]).toFixed(1)}" cy="${sy(kp[1]).toFixed(1)}" r="2.3" fill="#facc15"/>`;
+    }
+  });
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${lines}${dots}</svg>`;
+}
+
+function renderPoseCards(persons){
+  const grid=document.getElementById('poseGrid');
+  const empty=document.getElementById('poseEmpty');
+  if(!persons.length){ grid.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  grid.innerHTML=persons.map(p=>{
+    const kpCount=(p.keypoints||[]).filter(k=>k[2]>=0.3).length;
+    return `<div class="pose-card ${p.fallen?'fall':''}">
+      <div class="pose-head">
+        <span class="pose-id">ID ${p.id}</span>
+        ${p.fallen?'<span class="badge fall">TÉ NGÃ</span>':`<span class="badge normal">${p.posture||'Đứng'}</span>`}
+      </div>
+      <div class="pose-svg-wrap">${miniSkeletonSVG(p.bbox, p.keypoints)}</div>
+      <div class="pose-meta">
+        <span>Keypoints: <span class="mono">${kpCount}/17</span></span>
+        <span>Tỉ lệ khung: <span class="mono">${p.aspect_ratio}</span></span>
+        <span>Góc thân: <span class="mono">${p.torso_angle ?? '–'}°</span></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+setInterval(pollStatus,1000); pollStatus();
+
+// ═══ ĐIỀU CHỈNH GÓC CAMERA (PTZ JOYSTICK) ═══
+const jZone=document.getElementById('jZone');
+const jKnob=document.getElementById('jKnob');
+const J_R=60, J_KR=20, J_DEAD=0.05;
+let _jDrag=false, _jx=0, _jy=0, _jlx=null, _jly=null, _jraf=null;
+
+function _jCenter(){
+  const r=jZone.getBoundingClientRect();
+  return {cx:r.left+r.width/2, cy:r.top+r.height/2};
+}
+function _jSetKnob(dx,dy){ jKnob.style.transform=`translate(${dx}px,${dy}px)`; }
+function _jSend(x,y){
+  if(_jlx!==null && Math.abs(x-_jlx)<J_DEAD && Math.abs(y-_jly)<J_DEAD) return;
+  _jlx=x; _jly=y;
+  fetch('/joystick?x='+x.toFixed(3)+'&y='+y.toFixed(3), {credentials: 'same-origin'})
+    .catch(e=>{ console.warn('PTZ send error', e); });
+}
+function _jMove(e){
+  if(!_jDrag) return;
+  const {cx,cy}=_jCenter();
+  let dx=e.clientX-cx, dy=e.clientY-cy;
+  const dist=Math.hypot(dx,dy), max=J_R-J_KR;
+  if(dist>max){ const s=max/dist; dx*=s; dy*=s; }
+  _jSetKnob(dx,dy);
+  _jx=+(dx/max).toFixed(3);
+  _jy=+(-(dy/max)).toFixed(3);
+  if(_jraf) cancelAnimationFrame(_jraf);
+  _jraf=requestAnimationFrame(()=>_jSend(_jx,_jy));
+}
+function _jStop(){
+  _jDrag=false; _jSetKnob(0,0); _jlx=null; _jly=null;
+  fetch('/stop', {credentials: 'same-origin'})
+    .catch(e=>{ console.warn('PTZ stop error', e); });
+}
+jZone.addEventListener('pointerdown',e=>{ _jDrag=true; jZone.setPointerCapture(e.pointerId); _jMove(e); });
+jZone.addEventListener('pointermove',_jMove);
+jZone.addEventListener('pointerup',_jStop);
+jZone.addEventListener('pointercancel',_jStop);
+
+function onSpeed(v){
+  document.getElementById('spdLbl').textContent=parseFloat(v).toFixed(2);
+  fetch('/set_speed?value='+v, {credentials: 'same-origin'})
+    .catch(e=>{ console.warn('set_speed error', e); });
+}
+function doZoom(action){
+  fetch('/zoom_'+action, {credentials: 'same-origin'})
+    .then(r=>r.json()).then(d=>setZoomUI(d.zoom)).catch(e=>{ console.warn('zoom error', e); });
+}
+function setZoomUI(z){
+  document.getElementById('zLbl').textContent=z.toFixed(1)+'×';
+  document.getElementById('zFill').style.width=((z-1)/(4-1)*100)+'%';
+}
+
+// ═══ LỊCH SỬ CẢNH BÁO ═══
+let _lastAlertCount=0;
+function loadAlerts(){
+  fetch('/alerts', {credentials: 'same-origin'}).then(r=>r.json()).then(list=>{
+    const box=document.getElementById('alertList');
+    const empty=document.getElementById('alertEmpty');
+    if(list.length>_lastAlertCount && _lastAlertCount!==0) beep();
+    _lastAlertCount=list.length;
+    if(!list.length){ box.innerHTML=''; empty.style.display='block'; return; }
+    empty.style.display='none';
+    box.innerHTML=list.map(a=>`
+      <div class="alert-item">
+        <img src="/alerts/${a.filename}" onclick="openLb('/alerts/${a.filename}')">
+        <div class="alert-info">
+          <div class="aid">ID ${a.id}</div>
+          <div class="atime">${a.time}</div>
+        </div>
+        <button class="alert-del" onclick="delAlert('${a.filename}')">✕</button>
+      </div>`).join('');
+  });
+}
+function delAlert(filename){
+  fetch('/alerts/'+filename+'/delete',{method:'DELETE', credentials: 'same-origin'}).then(()=>loadAlerts()).catch(e=>{ console.warn('delAlert error', e); });
+}
+setInterval(loadAlerts,4000); loadAlerts();
+
+// ═══ LIGHTBOX ═══
+function openLb(url){ document.getElementById('lbImg').src=url; document.getElementById('lbox').classList.add('open'); }
+function closeLb(){ document.getElementById('lbox').classList.remove('open'); }
+document.getElementById('lbox').addEventListener('click',e=>{ if(e.target.id==='lbox') closeLb(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLb(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Đăng nhập — Fall Detection</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0d12; --card:#11161d; --border:#1f2733;
+  --accent:#2dd4bf; --accent-h:#14b8a6; --danger:#f43f5e;
+  --text:#dbe4ec; --muted:#5b6779;
+}
+body{background:var(--bg);font-family:'Inter',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:38px 34px;width:100%;max-width:380px;border-top:3px solid var(--accent)}
+.icon{width:50px;height:50px;border-radius:12px;background:linear-gradient(135deg,#0f766e,#2dd4bf);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 18px}
+h1{color:var(--text);font-size:19px;font-weight:700;text-align:center;margin-bottom:5px}
+.sub{color:var(--muted);font-size:13px;text-align:center;margin-bottom:26px}
+label{display:block;color:var(--muted);font-size:12px;font-weight:500;margin-bottom:6px}
+input{width:100%;padding:11px 13px;background:#0a0d12;border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:15px;outline:none;transition:border-color .15s;margin-bottom:16px}
+input:focus{border-color:var(--accent)}
+button[type=submit]{width:100%;padding:12px;background:var(--accent);border:none;border-radius:7px;color:#04201c;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s;margin-top:2px}
+button[type=submit]:hover{background:var(--accent-h)}
+.err{background:rgba(244,63,94,.12);border:1px solid rgba(244,63,94,.35);border-radius:7px;color:var(--danger);font-size:13px;padding:10px 14px;margin-bottom:18px;text-align:center}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">🚨</div>
+  <h1>Fall Detection</h1>
+  <p class="sub">Hệ thống giám sát &amp; cảnh báo té ngã</p>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <label>Tên đăng nhập</label>
+    <input type="text" name="username" placeholder="admin" required autofocus>
+    <label>Mật khẩu</label>
+    <input type="password" name="password" placeholder="••••••••" required>
+    <button type="submit">Đăng nhập</button>
+  </form>
+</div>
+</body>
+</html>
