@@ -1,17 +1,4 @@
-"""
-He thong canh bao te nga (Fall Detection) qua camera IP - YOLO26-Pose + Tracking
-==================================================================================
-Pipeline:
-    Camera RTSP -> OpenCV (grab/retrieve, chong lag)
-                -> YOLO26-Pose (model.track, tracker built-in: ByteTrack)
-                -> Fall-detection heuristic (ty le khung, goc than nguoi, thoi gian nam)
-                -> Phan loai dang nguoi (Dung/Ngoi/Cui/Nam) de hien thi chi tiet
-                -> Ve overlay (ID, khung, khung xuong, FPS) -> MJPEG stream
-                -> API JSON (/status, /alerts) cho phan web (templates/index.html)
-                -> Dieu khien goc camera (PTZ qua ONVIF) tu joystick web
-
-Phan hien thi web nam rieng trong templates/index.html + templates/login.html.
-Python file nay CHI xu ly logic camera/AI/API, khong nhung HTML.
+"""Fall detection server: RTSP -> YOLO26-Pose -> MJPEG/API (PTZ optional).
 """
 
 import os
