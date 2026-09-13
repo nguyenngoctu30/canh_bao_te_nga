@@ -465,6 +465,9 @@ persons_state: list = []     # danh sach nguoi o frame moi nhat, dung cho /statu
 zoom_level = 1.0
 ptz_speed = PTZ_DEFAULT_SPEED
 
+# Public ngrok URL (set when server starts if NGROK used)
+NGROK_PUBLIC_URL = None
+
 cap_lock = threading.Lock()
 cap = None
 
@@ -934,6 +937,18 @@ def delete_alert(filename):
     return jsonify({"status": "ok"})
 
 
+# Info route: returns ngrok public URL (if active) and whether PUBLIC_API_KEY is set.
+# Does not expose the API key unless DEBUG_EXPOSE_API_KEY=1 is set in environment.
+@app.route("/info")
+def info():
+    expose_key = os.environ.get("DEBUG_EXPOSE_API_KEY", "0") == "1"
+    return jsonify({
+        "ngrok_url": globals().get('NGROK_PUBLIC_URL'),
+        "public_api_key_set": bool(PUBLIC_API_KEY),
+        "public_api_key": PUBLIC_API_KEY if expose_key else None,
+    })
+
+
 # =====================================================================
 # MAIN — waitress (on dinh hon Flask dev server tren Windows)
 # =====================================================================
@@ -949,6 +964,11 @@ if __name__ == "__main__":
             conf.get_default().auth_token = NGROK_AUTH_TOKEN
             tunnel = ngrok.connect(5000, bind_tls=True)
             ngrok_url = tunnel.public_url
+            # expose to module-level variable for routes
+            try:
+                globals()['NGROK_PUBLIC_URL'] = ngrok_url
+            except Exception:
+                pass
             print(f"[NGROK] Public URL: {ngrok_url}")
             if PUBLIC_API_KEY:
                 print(f"[NGROK] Use API key: set window.API_KEY in web/config.js to '{PUBLIC_API_KEY}'")
