@@ -1,5 +1,3 @@
-"""Fall detection server: RTSP -> YOLO26-Pose -> MJPEG/API (PTZ optional).
-"""
 
 import os
 import time
@@ -20,16 +18,10 @@ from flask import (
 from flask_cors import CORS
 from ultralytics import YOLO
 
-# =====================================================================
-# CONFIG
-# =====================================================================
-# Co the set RTSP_URL day du (uu tien), hoac chi sua IP/USER/PASS/PATH ben duoi.
 _RTSP_IP   = os.environ.get("RTSP_IP", "192.168.1.8")
 _RTSP_PORT = os.environ.get("RTSP_PORT", "554")
 _RTSP_USER = os.environ.get("RTSP_USER", "admin")
 _RTSP_PASS = os.environ.get("RTSP_PASS", "JuLdN5Qv")
-# Duong dan sau cong 554 — TUY CAMERA, khong phai camera nao cung nhu nhau.
-# Neu chua biet path dung, chay file test_rtsp.py truoc de do tu dong.
 _RTSP_PATH = os.environ.get("RTSP_PATH", "/live/ch00_0")
 
 RTSP_URL = os.environ.get(
@@ -37,19 +29,15 @@ RTSP_URL = os.environ.get(
     f"rtsp://{_RTSP_USER}:{_RTSP_PASS}@{_RTSP_IP}:{_RTSP_PORT}{_RTSP_PATH}",
 )
 
-# Timeout ket noi RTSP (giay). Mac dinh FFmpeg cho phep toi 30s truoc khi bao
-# "Stream timeout" — qua lau khi dang do sai URL. Giam xuong de phat hien
-# nhanh cau hinh sai va thu lai som hon.
 RTSP_CONNECT_TIMEOUT_SEC = int(os.environ.get("RTSP_CONNECT_TIMEOUT_SEC", "6"))
 
 MODEL_PATH = os.environ.get("MODEL_PATH", "yolo26n-pose.pt")   # yolo26n/s/m/l/x-pose.pt
-TRACKER_CFG = "bytetrack.yaml"          # co san trong ultralytics, khong can file rieng
+TRACKER_CFG = "bytetrack.yaml"         
 CONF_THRES = 0.45
 IOU_THRES = 0.5
-TARGET_FPS = 15                          # fps xu ly/hien thi (khong phai fps model)
-RESIZE_TO = (960, 540)                   # None neu muon giu nguyen do phan giai goc
+TARGET_FPS = 15                         
+RESIZE_TO = (960, 540)                
 
-# Nguong phat hien te nga
 FALL_ASPECT_RATIO   = 1.35   # bbox.width / bbox.height >= nguong -> nam ngang
 FALL_ANGLE_DEG       = 55     # goc than (vai-hong) so voi phuong thang dung >= nguong -> nam
 FALL_CONFIRM_FRAMES  = 12     # so frame lien tiep thoa dieu kien moi bao "TE NGA" (chong bao gia)
@@ -67,10 +55,6 @@ WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "changeme123")
 # endpoints without session cookies. Set PUBLIC_API_KEY in env to enable.
 PUBLIC_API_KEY = os.environ.get("PUBLIC_API_KEY")
 
-# ---- Dieu khien goc camera (PTZ qua ONVIF) ----
-# Nhieu camera PTZ dung chung IP nhung PORT ONVIF khac PORT RTSP (554).
-# Neu camera khong ho tro PTZ/ONVIF, cu de ONVIF_ENABLED=false — web van
-# chay binh thuong, chi an di khoi joystick.
 ONVIF_ENABLED  = os.environ.get("ONVIF_ENABLED", "true").lower() in ("1", "true", "yes")
 ONVIF_IP       = os.environ.get("ONVIF_IP", _RTSP_IP)
 ONVIF_PORT     = int(os.environ.get("ONVIF_PORT", "8899"))
@@ -78,41 +62,28 @@ ONVIF_USERNAME = os.environ.get("ONVIF_USERNAME", _RTSP_USER)
 ONVIF_PASSWORD = os.environ.get("ONVIF_PASSWORD", _RTSP_PASS)
 PTZ_DEFAULT_SPEED = 0.5
 
-# ---- Zoom so (crop + resize tren frame, khong can camera ho tro zoom quang hoc) ----
 MAX_DIGITAL_ZOOM = 4.0
 ZOOM_STEP = 0.2
 
-# TCP + stimeout de khong treo 30s khi ket noi. LUU Y: truoc day chuoi nay
-# co them buffer_size;0|max_delay;0|reorder_queue_size;0 — cac co nay tren
-# mot so ban FFmpeg di kem OpenCV (vi du tren Windows) gay treo qua trinh mo
-# luong toi khi het stimeout thay vi bao loi ngay. Da rut gon lai con bo
-# options da kiem chung hoat dong on dinh.
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
     "rtsp_transport;tcp"
     f"|stimeout;{RTSP_CONNECT_TIMEOUT_SEC * 1_000_000}"
     "|fflags;nobuffer"
 )
 
-# =====================================================================
-# FLASK
-# =====================================================================
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change-me-in-production")
 app.permanent_session_lifetime = timedelta(days=7)
 
-# Enable CORS for frontend hosting (e.g., Vercel). If using credentials, set
-# a specific origin and supports_credentials=True. For simple public API key
-# usage we allow all origins here.
 CORS(app)
 
 
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        # Allow session-based login
+        
         if session.get("logged_in"):
             return f(*args, **kwargs)
-        # Allow API key in header or query string for static frontends
         key = None
         if PUBLIC_API_KEY:
             key = request.headers.get('X-API-KEY') or request.args.get('api_key')
@@ -124,9 +95,6 @@ def login_required(f):
     return decorated
 
 
-# =====================================================================
-# COCO-17 KEYPOINTS (chuan YOLO-Pose) + skeleton de ve
-# =====================================================================
 KP_NAMES = [
     "nose", "l_eye", "r_eye", "l_ear", "r_ear",
     "l_shoulder", "r_shoulder", "l_elbow", "r_elbow",
@@ -141,9 +109,7 @@ SKELETON = [
 ]
 KP_CONF_MIN = 0.30
 
-# =====================================================================
-# MODEL — nap YOLO26-Pose o thread rieng, khong chan khoi dong server
-# =====================================================================
+
 MODEL_OK = False
 model = None
 
@@ -163,10 +129,6 @@ def _load_model():
 
 threading.Thread(target=_load_model, daemon=True, name="yolo-loader").start()
 
-
-# =====================================================================
-# ONVIF / PTZ — dieu khien goc camera tu web (joystick)
-# =====================================================================
 PTZ_OK = False
 ptz_svc = None
 token = None
@@ -184,7 +146,7 @@ def _onvif_connect():
         print("[ONVIF] Web van chay binh thuong, chi khong dieu khien duoc goc camera.")
         return
     try:
-        # Try to detect wsdl folder from installed onvif package and pass it
+    
         wsdl_dir = None
         try:
             import onvif as _onvif_mod
@@ -199,10 +161,10 @@ def _onvif_connect():
         else:
             cam = ONVIFCamera(ONVIF_IP, ONVIF_PORT, ONVIF_USERNAME, ONVIF_PASSWORD)
         media = cam.create_media_service()
-        # create PTZ service and token
+      
         ptz = cam.create_ptz_service()
         tkn = media.GetProfiles()[0].token
-        # assign to globals
+        
         globals()['ptz_svc'] = ptz
         globals()['token'] = tkn
         PTZ_OK = True
@@ -214,8 +176,6 @@ def _onvif_connect():
 
 threading.Thread(target=_onvif_connect, daemon=True, name="onvif-connect").start()
 
-# Worker rieng gui lenh PTZ — route HTTP chi ghi "van toc muon", worker doc va
-# gui ONVIF, tach hoan toan khoi vong doi request HTTP (phan hoi ngay lap tuc).
 _ptz_lock = threading.Lock()
 _ptz_vx = 0.0
 _ptz_vy = 0.0
@@ -270,10 +230,7 @@ threading.Thread(target=_ptz_worker, daemon=True, name="ptz-worker").start()
 
 
 def ptz_set(vx: float, vy: float):
-    """Cập nhật target velocity + wake worker ngay lập tức.
 
-    vx, vy: float in [-1.0, 1.0] representing pan (x) và tilt (y) velocities.
-    """
     global _ptz_vx, _ptz_vy
     with _ptz_lock:
         _ptz_vx, _ptz_vy = float(vx), float(vy)
@@ -286,21 +243,15 @@ def ptz_set(vx: float, vy: float):
 
 
 def ptz_move(x=0.0, y=0.0):
-    """Alias to set velocity (x=pan, y=tilt)."""
     ptz_set(x, y)
 
 
 def ptz_stop():
-    """Alias to stop movement immediately."""
     ptz_set(0.0, 0.0)
 
 
-# =====================================================================
-# FALL DETECTION — trang thai theo tung track ID
-# =====================================================================
 _track_lock = threading.Lock()
 _track_state: dict[int, dict] = {}
-# moi ID: {fall_count, recover_count, is_fallen, fall_since, last_seen}
 
 
 def _angle_from_vertical(p_top, p_bottom):
@@ -320,7 +271,6 @@ def _midpoint_if_visible(a, b):
 
 
 def _evaluate_fall(track_id, bbox, keypoints):
-    """Tra ve (is_fallen, newly_triggered, aspect_ratio, torso_angle)."""
     x1, y1, x2, y2 = bbox
     w, h = max(x2 - x1, 1), max(y2 - y1, 1)
     aspect = w / h
@@ -368,22 +318,14 @@ def _purge_stale_tracks():
             del _track_state[tid]
 
 
-# =====================================================================
-# PHAN TICH DANG NGUOI (posture) — chi tiet hon co/khong te nga
-# Dung cho hien thi web: Dung / Ngoi / Nam-te nga / Khong ro
-# =====================================================================
 def _classify_posture(is_fallen: bool, aspect: float, angle, bbox, keypoints):
-    """Phan loai dang nguoi de hien thi chi tiet tren web.
-    is_fallen: ket qua da qua debounce (dung de bao dong, giu nguyen).
-    Ham nay chi phuc vu HIEN THI, khong anh huong logic canh bao."""
+
     if is_fallen:
         return "Nam / Te nga"
 
     if angle is not None and angle >= 35:
         return "Cui / Nghieng nguoi"
 
-    # Uoc luong Ngoi: hong va goi gan nhau theo truc doc (dui gap lai)
-    # so voi chieu cao khung — dac trung cua tu the ngoi.
     if keypoints is not None:
         x1, y1, x2, y2 = bbox
         h = max(y2 - y1, 1)
@@ -401,9 +343,6 @@ def _classify_posture(is_fallen: bool, aspect: float, angle, bbox, keypoints):
     return "Dung"
 
 
-# =====================================================================
-# ALERTS — luu anh + log khi phat hien te nga
-# =====================================================================
 _alerts_lock = threading.Lock()
 _alerts: deque = deque(maxlen=300)
 
@@ -441,9 +380,6 @@ def _record_alert(track_id, frame_bgr):
     return entry
 
 
-# =====================================================================
-# SHARED STATE (camera + ket qua nhan dien moi nhat)
-# =====================================================================
 state_lock = threading.Lock()
 connected = False
 last_frame_time = 0.0
@@ -451,8 +387,6 @@ frame_timestamps: deque = deque(maxlen=60)
 persons_state: list = []     # danh sach nguoi o frame moi nhat, dung cho /status
 zoom_level = 1.0
 ptz_speed = PTZ_DEFAULT_SPEED
-
-# (No ngrok variables here)
 
 cap_lock = threading.Lock()
 cap = None
@@ -518,7 +452,6 @@ def _draw_overlay(img, persons, fps):
                 if kp[2] >= KP_CONF_MIN:
                     cv2.circle(img, (int(kp[0]), int(kp[1])), 3, (0, 255, 255), -1, cv2.LINE_AA)
 
-    # HUD goc tren trai
     cv2.putText(img, f"FPS: {fps:.1f}", (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (0, 255, 0), 2, cv2.LINE_AA)
     cv2.putText(img, f"Nguoi: {len(persons)}", (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (0, 255, 0), 2, cv2.LINE_AA)
     if any(p["fallen"] for p in persons):
@@ -527,7 +460,6 @@ def _draw_overlay(img, persons, fps):
 
 
 def _run_yolo_track(img):
-    """Chay YOLO26-Pose + tracking tren 1 frame, tra ve list persons (dict)."""
     persons = []
     if not MODEL_OK:
         return persons
@@ -583,7 +515,7 @@ def _run_yolo_track(img):
 
 
 def camera_loop():
-    """Vong lap chinh: doc RTSP -> YOLO tracking -> fall-detect -> ve overlay -> broadcast."""
+    
     global cap, connected, last_frame_time, persons_state
 
     frame_count = 0
@@ -591,7 +523,7 @@ def camera_loop():
     last_log_t = 0.0
 
     while True:
-        # ---- Ket noi RTSP ----
+       
         with cap_lock:
             need_reconnect = (cap is None or not cap.isOpened())
 
@@ -616,7 +548,7 @@ def camera_loop():
                 print("[CAM] Da mo duoc luong RTSP, dang cho frame dau tien...")
             continue
 
-        # ---- Xa buffer cu (giam do tre) ----
+  
         grabbed = False
         with cap_lock:
             for _ in range(4):
@@ -696,9 +628,6 @@ def camera_loop():
 threading.Thread(target=camera_loop, daemon=True, name="cam-loop").start()
 
 
-# =====================================================================
-# MJPEG GENERATOR (moi client 1 queue rieng)
-# =====================================================================
 def generate():
     q: queue.Queue = queue.Queue(maxsize=3)
     with _clients_lock:
@@ -716,9 +645,6 @@ def generate():
                 _clients.remove(q)
 
 
-# =====================================================================
-# ROUTES — AUTH
-# =====================================================================
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
     error = None
@@ -738,9 +664,7 @@ def logout():
     return redirect(url_for("login_page"))
 
 
-# =====================================================================
-# ROUTES — TRANG CHINH & VIDEO
-# =====================================================================
+
 @app.route("/")
 @login_required
 def index():
@@ -757,9 +681,6 @@ def video_feed():
     return resp
 
 
-# =====================================================================
-# ROUTES — API TRANG THAI
-# =====================================================================
 @app.route("/status")
 @login_required
 def status():
@@ -816,7 +737,6 @@ def reconnect():
         if cap:
             cap.release()
         cap = None
-    # Also attempt ONVIF/PTZ reconnect in background (useful after installing onvif libs)
     def _try_onvif():
         try:
             _onvif_connect()
@@ -827,9 +747,7 @@ def reconnect():
     return jsonify({"status": "reconnecting"})
 
 
-# =====================================================================
-# ROUTES — DIEU KHIEN GOC CAMERA (PTZ) + ZOOM
-# =====================================================================
+
 @app.route("/joystick")
 @login_required
 def joystick():
@@ -894,9 +812,6 @@ def zoom_reset():
     return jsonify({"zoom": 1.0})
 
 
-# =====================================================================
-# ROUTES — LICH SU CANH BAO TE NGA
-# =====================================================================
 @app.route("/alerts")
 @login_required
 def list_alerts():
@@ -923,12 +838,6 @@ def delete_alert(filename):
     return jsonify({"status": "ok"})
 
 
-# No /info route (ngrok support removed)
-
-
-# =====================================================================
-# MAIN — waitress (on dinh hon Flask dev server tren Windows)
-# =====================================================================
 if __name__ == "__main__":
     # Start server (no ngrok)
 
