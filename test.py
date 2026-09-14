@@ -3,7 +3,7 @@ Script do tim duong dan (path) RTSP dung cho camera.
 Chay rieng, KHONG lien quan toi app.py — chi de tim ra URL RTSP dung.
 
 Cach dung:
-    python test_rtsp.py
+    python test.py
 
 Sua IP / USERNAME / PASSWORD ben duoi truoc khi chay.
 """
